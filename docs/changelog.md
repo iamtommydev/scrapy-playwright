@@ -1,6 +1,15 @@
 # scrapy-playwright changelog
 
 
+### [v0.0.47](https://github.com/scrapy-plugins/scrapy-playwright/releases/tag/v0.0.47) (2026-02-25)
+
+* Bump minimum Scrapy version to 2.14, removing all legacy Deferred-based code paths
+* Bump minimum Playwright version to 1.57
+* Add `lazy = True` attribute to download handler (Scrapy 2.14+ requirement)
+* Remove obsolete Twisted-based tests
+* Clean up `_ThreadedLoopAdapter` by removing Deferred support
+
+
 ### [v0.0.46](https://github.com/scrapy-plugins/scrapy-playwright/releases/tag/v0.0.46) (2026-01-21)
 
 * Threaded loop updates & fixes (#361)

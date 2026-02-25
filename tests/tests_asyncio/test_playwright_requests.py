@@ -15,7 +15,7 @@ from playwright.async_api import (
 )
 from scrapy import Spider, Request, FormRequest
 
-from scrapy_playwright.handler import DEFAULT_CONTEXT_NAME, _SCRAPY_ASYNC_API
+from scrapy_playwright.handler import DEFAULT_CONTEXT_NAME
 from scrapy_playwright.page import PageMethod
 
 from tests import allow_windows, make_handler, assert_correct_response
@@ -51,9 +51,8 @@ class MixinTestCase:
                 req = Request(server.urljoin("/index.html"), meta=meta)
                 resp = await handler._download_request(req, Spider("foo"))
 
-                if _SCRAPY_ASYNC_API:
-                    req2 = Request(server.urljoin("/gallery.html"), meta=meta)
-                    resp2 = await handler.download_request(req2)
+                req2 = Request(server.urljoin("/gallery.html"), meta=meta)
+                resp2 = await handler.download_request(req2)
 
             assert_correct_response(resp, req)
             assert resp.css("a::text").getall() == ["Lorem Ipsum", "Infinite Scroll"]
@@ -61,13 +60,11 @@ class MixinTestCase:
             assert resp.meta["playwright_page"].url == resp.url
             await resp.meta["playwright_page"].close()
 
-            if _SCRAPY_ASYNC_API:
-                assert_correct_response(resp2, req2)
-                assert isinstance(resp2.meta["playwright_page"], PlaywrightPage)
-                assert resp2.meta["playwright_page"].url == resp2.url
-                await resp2.meta["playwright_page"].close()
+            assert_correct_response(resp2, req2)
+            assert isinstance(resp2.meta["playwright_page"], PlaywrightPage)
+            assert resp2.meta["playwright_page"].url == resp2.url
+            await resp2.meta["playwright_page"].close()
 
-    @pytest.mark.skipif(not _SCRAPY_ASYNC_API, reason="Requires Scrapy async API")
     @allow_windows
     async def test_non_playwright_request_fallback(self):
         async with make_handler({"PLAYWRIGHT_BROWSER_TYPE": self.browser_type}) as handler:
@@ -108,16 +105,15 @@ class MixinTestCase:
                     f" exc_type={type(excinfo.value)} exc_msg={str(excinfo.value)}",
                 ) in self._caplog.record_tuples
 
-                if _SCRAPY_ASYNC_API:
-                    req2 = Request(server.urljoin("/asdf?delay=1"), meta={"playwright": True})
-                    with pytest.raises(PlaywrightTimeoutError) as excinfo2:
-                        await handler.download_request(req2)
-                    assert (
-                        "scrapy-playwright",
-                        logging.WARNING,
-                        f"Closing page due to failed request: {req2}"
-                        f" exc_type={type(excinfo2.value)} exc_msg={str(excinfo2.value)}",
-                    ) in self._caplog.record_tuples
+                req2 = Request(server.urljoin("/asdf?delay=1"), meta={"playwright": True})
+                with pytest.raises(PlaywrightTimeoutError) as excinfo2:
+                    await handler.download_request(req2)
+                assert (
+                    "scrapy-playwright",
+                    logging.WARNING,
+                    f"Closing page due to failed request: {req2}"
+                    f" exc_type={type(excinfo2.value)} exc_msg={str(excinfo2.value)}",
+                ) in self._caplog.record_tuples
 
     @allow_windows
     async def test_retry_page_content_still_navigating(self):

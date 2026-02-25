@@ -10,8 +10,6 @@ from playwright.async_api import Error, Page, Request, Response
 from scrapy.http.headers import Headers
 from scrapy.settings import Settings
 from scrapy.utils.python import to_unicode
-from twisted.internet.defer import Deferred
-from twisted.python import failure
 from w3lib.encoding import html_body_declared_encoding, http_content_type_encoding
 
 
@@ -108,7 +106,7 @@ async def _get_header_value(
 @dataclass
 class _QueueItem:
     coro: Awaitable
-    promise: Deferred | asyncio.Future
+    promise: asyncio.Future
     loop: asyncio.AbstractEventLoop | None = None
 
 
@@ -122,19 +120,6 @@ class _ThreadedLoopAdapter:
     _thread: threading.Thread
     _coro_queue: asyncio.Queue = asyncio.Queue()
     _stop_events: Dict[int, asyncio.Event] = {}
-
-    @classmethod
-    async def _handle_coro_deferred(cls, queue_item: _QueueItem) -> None:
-        from twisted.internet import reactor
-
-        dfd: Deferred = queue_item.promise
-
-        try:
-            result = await queue_item.coro
-        except Exception as exc:
-            reactor.callFromThread(dfd.errback, failure.Failure(exc))
-        else:
-            reactor.callFromThread(dfd.callback, result)
 
     @classmethod
     async def _handle_coro_future(cls, queue_item: _QueueItem) -> None:
@@ -151,18 +136,8 @@ class _ThreadedLoopAdapter:
     async def _process_queue(cls) -> None:
         while any(not ev.is_set() for ev in cls._stop_events.values()):
             queue_item = await cls._coro_queue.get()
-            if isinstance(queue_item.promise, asyncio.Future):
-                asyncio.create_task(cls._handle_coro_future(queue_item))
-            elif isinstance(queue_item.promise, Deferred):
-                asyncio.create_task(cls._handle_coro_deferred(queue_item))
+            asyncio.create_task(cls._handle_coro_future(queue_item))
             cls._coro_queue.task_done()
-
-    @classmethod
-    def _deferred_from_coro(cls, coro: Awaitable) -> Deferred:
-        dfd: Deferred = Deferred()
-        queue_item = _QueueItem(coro=coro, promise=dfd)
-        asyncio.run_coroutine_threadsafe(cls._coro_queue.put(queue_item), cls._loop)
-        return dfd
 
     @classmethod
     def _future_from_coro(cls, coro: Awaitable) -> asyncio.Future:
