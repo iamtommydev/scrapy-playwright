@@ -147,6 +147,7 @@ class ScrapyPlaywrightDownloadHandler(HTTP11DownloadHandler):
 
         self.browser_launch_lock = asyncio.Lock()
         self.context_launch_lock = asyncio.Lock()
+        self._launch_lock = asyncio.Lock()
         self.context_wrappers: Dict[str, BrowserContextWrapper] = {}
         if self.config.max_contexts:
             self.context_semaphore = asyncio.Semaphore(value=self.config.max_contexts)
@@ -176,7 +177,16 @@ class ScrapyPlaywrightDownloadHandler(HTTP11DownloadHandler):
         return coro
 
     async def _maybe_launch_in_thread(self) -> None:
-        await self._maybe_future_from_coro(self._launch())
+        await self._maybe_future_from_coro(self._ensure_launched())
+
+    async def _ensure_launched(self) -> None:
+        """Ensure Playwright has been launched. Handles lazy instantiation
+        where the engine_started signal fired before this handler existed."""
+        if self.playwright is not None:
+            return
+        async with self._launch_lock:
+            if self.playwright is None:
+                await self._launch()
 
     async def _launch(self) -> None:
         """Launch Playwright manager and configured startup context(s)."""
@@ -366,6 +376,7 @@ class ScrapyPlaywrightDownloadHandler(HTTP11DownloadHandler):
 
     async def download_request(self, request: Request) -> Response:
         if request.meta.get("playwright"):
+            await self._maybe_future_from_coro(self._ensure_launched())
             coro = self._download_request(request)
             return await self._maybe_future_from_coro(coro)
         return await super().download_request(request)
